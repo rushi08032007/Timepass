@@ -62,6 +62,12 @@ const getFeedback = (guess: string, secretCode: string): { feedback: string; isC
 };
 
 export function CodeDuelGame() {
+    const [isClient, setIsClient] = useState(false);
+
+    useEffect(() => {
+      setIsClient(true);
+    }, []);
+
     const [gameStatus, setGameStatus] = useState<GameStatus>('setupP1');
     const [winner, setWinner] = useState<Player | 'draw' | null>(null);
     const [turn, setTurn] = useState<number>(1);
@@ -91,8 +97,10 @@ export function CodeDuelGame() {
     }, []);
     
     useEffect(() => {
-        inputRefs.current[0]?.focus();
-    }, [gameStatus, currentPlayer]);
+        if (isClient) {
+            inputRefs.current[0]?.focus();
+        }
+    }, [gameStatus, currentPlayer, isClient]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>, index: number) => {
         const value = e.target.value.replace(/\D/g, '');
@@ -293,6 +301,25 @@ export function CodeDuelGame() {
         </AlertDialog>
       );
     };
+
+    if (!isClient) {
+        return (
+            <div className="w-full flex flex-col gap-6">
+                <header className="text-center">
+                    <h1 className="font-headline text-5xl sm:text-6xl font-bold text-primary tracking-tight flex items-center justify-center gap-3">
+                        <Swords className="h-10 w-10 sm:h-12 sm:w-12" />
+                        Code Duel
+                    </h1>
+                    <p className="text-muted-foreground mt-3 text-base sm:text-lg">
+                        A 2-player logic battle. Who can crack the code first?
+                    </p>
+                </header>
+                <div className="flex items-center justify-center p-10">
+                    <Loader2 className="h-16 w-16 animate-spin text-primary" />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="w-full flex flex-col gap-6">
