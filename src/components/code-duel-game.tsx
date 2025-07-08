@@ -91,10 +91,6 @@ export function CodeDuelGame() {
     }, []);
     
     useEffect(() => {
-        startNewGame();
-    }, [startNewGame]);
-
-    useEffect(() => {
         inputRefs.current[0]?.focus();
     }, [gameStatus, currentPlayer]);
 
@@ -203,7 +199,7 @@ export function CodeDuelGame() {
                                 <Input
                                     key={index}
                                     ref={el => inputRefs.current[index] = el}
-                                    type="password"
+                                    type="tel"
                                     maxLength={1}
                                     value={digit}
                                     onChange={(e) => handleInputChange(e, index)}
