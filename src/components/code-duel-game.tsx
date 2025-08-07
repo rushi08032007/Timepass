@@ -7,10 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Loader2, Send, Trophy, Users, Swords } from "lucide-react";
+import { Loader2, Send, Trophy, Users, Swords, Timer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
 
 const MAX_TURNS = 10;
+const TURN_DURATION = 30;
 
 type GameStatus = 'setupP1' | 'setupP2' | 'playing' | 'gameOver';
 type Player = 'Player 1' | 'Player 2';
@@ -77,11 +79,63 @@ export function CodeDuelGame() {
     const [p1Guesses, setP1Guesses] = useState<Guess[]>([]);
     const [p2Guesses, setP2Guesses] = useState<Guess[]>([]);
     const [currentPlayer, setCurrentPlayer] = useState<Player>('Player 1');
+    const [timeLeft, setTimeLeft] = useState(TURN_DURATION);
 
     const [currentCode, setCurrentCode] = useState<string[]>(['', '', '']);
     const [isLoading, setIsLoading] = useState(false);
     const { toast } = useToast();
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+    const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+    const nextTurn = useCallback(() => {
+        if (currentPlayer === 'Player 1') {
+            if (turn >= MAX_TURNS) {
+                 setCurrentPlayer('Player 2'); // Give P2 their final turn
+            } else {
+                setCurrentPlayer('Player 2');
+            }
+        } else { // Player 2's turn
+            if (turn >= MAX_TURNS) {
+                setWinner('draw');
+                setGameStatus('gameOver');
+            } else {
+                setCurrentPlayer('Player 1');
+                setTurn(t => t + 1);
+            }
+        }
+        setCurrentCode(['', '', '']);
+        inputRefs.current[0]?.focus();
+    }, [currentPlayer, turn]);
+
+    useEffect(() => {
+        if (gameStatus !== 'playing') {
+            if (timerRef.current) clearInterval(timerRef.current);
+            return;
+        }
+
+        setTimeLeft(TURN_DURATION);
+        if (timerRef.current) clearInterval(timerRef.current);
+
+        timerRef.current = setInterval(() => {
+            setTimeLeft(prevTime => {
+                if (prevTime <= 1) {
+                    if (timerRef.current) clearInterval(timerRef.current);
+                    toast({
+                        variant: "destructive",
+                        title: "Time's up!",
+                        description: `${currentPlayer}'s turn has ended.`,
+                    });
+                    nextTurn();
+                    return 0;
+                }
+                return prevTime - 1;
+            });
+        }, 1000);
+
+        return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+        };
+    }, [currentPlayer, gameStatus, nextTurn, toast]);
 
     const startNewGame = useCallback(() => {
         setGameStatus('setupP1');
@@ -93,6 +147,7 @@ export function CodeDuelGame() {
         setP2Guesses([]);
         setCurrentPlayer('Player 1');
         setCurrentCode(['', '', '']);
+        setTimeLeft(TURN_DURATION);
         setTimeout(() => inputRefs.current[0]?.focus(), 0);
     }, []);
     
@@ -153,6 +208,7 @@ export function CodeDuelGame() {
         if (!validateCode(guessString)) return;
 
         setIsLoading(true);
+        if (timerRef.current) clearInterval(timerRef.current);
         await new Promise(resolve => setTimeout(resolve, 300));
 
         try {
@@ -162,10 +218,8 @@ export function CodeDuelGame() {
                 if (isCorrectGuess) {
                     setWinner('Player 1');
                     setGameStatus('gameOver');
-                } else if (turn >= MAX_TURNS) {
-                     setCurrentPlayer('Player 2'); // Give P2 their final turn
                 } else {
-                    setCurrentPlayer('Player 2');
+                    nextTurn();
                 }
             } else { // Player 2's turn
                 const { feedback, isCorrectGuess } = getFeedback(guessString, p1Secret);
@@ -173,12 +227,8 @@ export function CodeDuelGame() {
                 if (isCorrectGuess) {
                     setWinner('Player 2');
                     setGameStatus('gameOver');
-                } else if (turn >= MAX_TURNS) {
-                    setWinner('draw');
-                    setGameStatus('gameOver');
                 } else {
-                    setCurrentPlayer('Player 1');
-                    setTurn(t => t + 1);
+                    nextTurn();
                 }
             }
             
@@ -235,6 +285,13 @@ export function CodeDuelGame() {
                     <CardDescription>Turn {turn} of {MAX_TURNS}. Guess your opponent's code.</CardDescription>
                 </CardHeader>
                 <CardContent>
+                     <div className="max-w-md mx-auto mb-4">
+                        <div className="flex items-center gap-2 mb-1 text-sm text-muted-foreground">
+                            <Timer className="h-4 w-4" />
+                            <span>Time Left: {timeLeft}s</span>
+                        </div>
+                        <Progress value={(timeLeft / TURN_DURATION) * 100} className="h-2" />
+                    </div>
                     <form onSubmit={handleGuessSubmit} className="flex gap-2 sm:gap-4 items-center max-w-md mx-auto">
                         <div className="flex-grow grid grid-cols-3 gap-2 sm:gap-4">
                             {currentCode.map((digit, index) => (
@@ -273,13 +330,13 @@ export function CodeDuelGame() {
 
       if (winner === 'draw') {
         title = "It's a Draw!";
-        description = "Neither player guessed the code within 10 turns.";
+        description = `Neither player guessed the code within ${MAX_TURNS} turns.`;
       } else if (winner === 'Player 1') {
         title = "Player 1 Wins!";
         description = <>Congratulations! You cracked Player 2's code (<span className="font-bold text-primary font-mono tracking-widest">{p2Secret}</span>) in {turn} turns.</>;
       } else if (winner === 'Player 2') {
         title = "Player 2 Wins!";
-        description = <>Congratulations! You cracked Player 1's code (<span className="font-bold text-primary font-mono tracking-widest">{p1Secret}</span>) in {turn} turns.</>;
+        description = <>Congratulations! You cracked Player 1's code (<span className="font-bold text-primary font-mono tracking-widest">{p1Secret}</span>) in {p2Guesses.length} turns.</>;
       }
       
       return (
@@ -366,3 +423,5 @@ function PlayerGuesses({ player, guesses }: { player: Player, guesses: Guess[] }
         </Card>
     )
 }
+
+    
